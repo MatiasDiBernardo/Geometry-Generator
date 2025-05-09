@@ -29,18 +29,20 @@ class WallsGenerator():
         min_y = 100
         max_y = 600
 
-        self.Lx = np.random.uniform(min_x, max_x)
-        self.Ly = np.random.uniform(min_y, max_y)
+        self.Lx = int(np.random.uniform(min_x, max_x))
+        self.Ly = int(np.random.uniform(min_y, max_y))
 
-        if self.Ly > self.x:
+        if self.Ly > self.Lx:
             self.Lx, self.Ly = self.Ly, self.Lx
 
         self.Dx = np.random.uniform(30, 100)
         self.Dy = np.random.uniform(30, 100)
         self.calculate_interior_rect()
     
+    def get_state(self):
+        return (self.Lx, self.Ly, self.Dx, self.Dy, self.index_initial_wall, self.index_finish_wall)
+    
     def update_state(self, action):
-        self.update_initial_walls()
         self.intial_wall_positions()
         self.calculalte_walls_positions(action)
 
@@ -55,9 +57,12 @@ class WallsGenerator():
 
         self.index_initial_wall = np.random.randint(0, self.points_initial_wall)
         self.index_finish_wall = np.random.randint(0, self.points_initial_wall)
+        
+        arr1[self.index_initial_wall] = 1
+        arr2[self.index_finish_wall] = 1
 
-        self.initial_wall = arr1[self.index_initial_wall]
-        self.finish_wall = arr2[self.index_finish_wall]
+        self.initial_wall = arr1
+        self.finish_wall = arr2
     
     def calculate_interior_rect(self):
         # Posiciones borde interior
@@ -90,8 +95,15 @@ class WallsGenerator():
             pos = (dx * i, self.Ly)
             if self.finish_wall[i] == 1:
                 self.pos_wall_final.append(pos)
+    
+    def from_index_to_grid(self, grid_index):
+        grid_points = np.zeros(self.N, dtype=int)
+        for idx in grid_index:
+            grid_points[idx] = 1
+        
+        return grid_points
 
-    def calculalte_walls_positions(self, grid_points):
+    def calculalte_walls_positions(self, grid_index):
         # Area calc
         top_area =self.Lx//2 * self.Dy
         middle_area = self.Dx * (self.Ly - 2 * self.Dy)
@@ -110,6 +122,7 @@ class WallsGenerator():
         # Iterar 
         row = 0
         col = 0
+        grid_points = self.from_index_to_grid(grid_index)
 
         # Intial position and conditions
         spx = 0  # Start position X
@@ -223,10 +236,14 @@ class WallsGenerator():
         
         # Si el el score es mayor a 0
         if self.score > 0:
-            return 10
+            return 30
 
     def loss_game_condition(self):
-        return self.level_iterations < self.max_level_iterations
+        if self.level_iterations > self.max_level_iterations:
+            self.level_iterations = 1
+            return True
+        else:
+            return False
 
     def play_step(self, move):
         self.update_state(move)
@@ -241,6 +258,8 @@ class WallsGenerator():
         # If the agent wins the game resets
         if self.score == self.max_score_condition:
             self.reset()
+        
+        self.update_initial_walls()  # Cambia el state
 
         return self.score, reward, game_over
     
@@ -275,7 +294,7 @@ class WallGeneratorGUI():
         Lx, Ly, Dx, Dy, _, _ = state
 
         # Posiciones borde interior
-        top_left = (Dx, self.PadY + Dy)
+        top_left = (self.PadX + Dx, self.PadY + Dy)
         rect_width = Lx - 2 * Dx
         rect_height = Ly - 2 * Dy
         
@@ -286,6 +305,9 @@ class WallGeneratorGUI():
             rect_width,
             rect_height
         )
+
+        # Border Interior 
+        pygame.draw.rect(self.screen, self.WHITE, self.interior_rect, self.line_width)
 
         # Posiciones borde exterior
         top_left = (self.PadX, self.PadY)
@@ -299,14 +321,14 @@ class WallGeneratorGUI():
         pygame.draw.line(self.screen, self.WHITE, bottom_rignt, bottom_left, self.line_width)
         pygame.draw.line(self.screen, self.WHITE, bottom_left, top_left, self.line_width)
         
-        # Border Interior 
-        pygame.draw.rect(self.screen, self.WHITE, self.interior_rect, self.line_width)
 
     def draw_walls(self, walls):
         color = (255, 255, 0)
         self.line_width = 4
         for i in range(len(walls) - 1):
-            pygame.draw.line(self.screen, color, walls[i], walls[i + 1], self.line_width)
+            wall1 = (walls[i][0] + self.PadX, walls[i][1] + self.PadY)
+            wall2 = (walls[i + 1][0] + self.PadX, walls[i + 1][1] + self.PadY)
+            pygame.draw.line(self.screen, color, wall1, wall2, self.line_width)
     
     def draw_score(self, score):
         if score != 0:
